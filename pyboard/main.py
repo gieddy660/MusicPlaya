@@ -81,7 +81,6 @@ def main():
                         player.vol = 1
                     
                     if speed_pin() == 0:
-
                         speed = adc_volume.read_u16() / 655 + 1
                         player.speed = speed
                     if speed_reset_pin() == 0:
