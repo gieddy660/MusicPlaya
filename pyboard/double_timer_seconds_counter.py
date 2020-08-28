@@ -1,1 +1,0 @@
-from pyb import Timert1 = Timer(8)t2 = Timer(9)t2.init(prescaler=167, period=2999999)t1.init(freq=1, callback=lambda t: print(t2.counter()))
