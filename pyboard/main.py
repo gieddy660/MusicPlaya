@@ -6,8 +6,8 @@ from math import ceil
 from time import sleep
 from pyb import Timer, DAC, UART
 from machine import Pin, ADC
-from music_playa import MusicPlaya, MusicPlayaMulti, EOSong
-from song_lister import lister
+from musicplaya import MusicPlayaMono, EOSong
+from songlister import lister
 
 from gc import collect, mem_alloc, mem_free
 
@@ -27,7 +27,7 @@ speed_reset_pin = Pin('X10', Pin.IN, Pin.PULL_UP)
 
 
 collect()
-player = MusicPlaya(tim, dac_right, speed=1)
+player = MusicPlayaMono(tim, dac_right, speed=1)
 songs = lister()
 
 
