@@ -12,93 +12,75 @@ class MusicPlaya:
     BUFFER_SIZE = 22060
     PRESCALER = 3808
     
-    def __init__(self, timer, dac, vol=1, speed=1):
-        self.buffer = bytearray(MusicPlaya.BUFFER_SIZE)
-        
+    def __init__(self, timer, vol=1, speed=1):
         self.timer = timer
-        self.dac = dac
         self.vol = vol
         self.speed = speed
+        self._flag = False
         
-        self.flag = False
-    
     def _callback(self, tim):
-        self.flag = True
+        self._flag = True
         tim.deinit()
-        
-    def play(self, file):
-        try:
-            assert file.readinto(self.buffer) > 1
-        except AssertionError:
+    
+    def play(self, condition, loop_part):
+        if condition():
             raise EOSong(EOSong.NEXT)
-        
-        self.flag = False
-
         
         boost = lambda x: x
         if self.vol != 1:
             boost = lambda x: min(max(127 + int( (x - 127) * self.vol ), 0), 255)
         
+        self._flag = False
         self.timer.init(prescaler=(int(MusicPlaya.PRESCALER / self.speed)), period=MusicPlaya.BUFFER_SIZE-1, callback=self._callback)
-        while self.flag == False:
-            self.dac.write(boost(self.buffer[self.timer.counter()]))  # this doesn't go out of range because the buffer is preallocated and always of the same size
+        
+        while self._flag == False:
+            loop_part()
+
+
+class MusicPlayaMono(MusicPlaya):
+    def __init__(self, timer, dac, vol=1, speed=1):
+        self.buffer = bytearray(MusicPlaya.BUFFER_SIZE)
+        self.dac = dac
+        super().__init__(timer, vol, speed)
+        
+    def play(self, file):
+        super().play(lambda: file.readinto(self.buffer) > 1,
+                     lambda: self.dac.write(boost(self.buffer[self.timer.counter()])))
 
 
 class MusicPlayaStereo(MusicPlaya):
     def __init__(self, timer, dacR, dacL, vol=1, speed=1):
-        self.timer = timer
+        self.bufferR = bytearray(MusicPlaya.BUFFER_SIZE)
+        self.bufferL = bytearray(MusicPlaya.BUFFER_SIZE)
         self.dacR = dacR
         self.dacL = dacL
-        self.vol = vol
-        self.speed = speed
-        
-        self.flag = False
+        super().__init__(timer, vol, speed)
 
     def play(self, fileR, fileL):
-        bufferR = fileR.read(MusicPlaya.BUFFER_SIZE)
-        bufferL = fileL.read(MusicPlaya.BUFFER_SIZE)
-        self.flag = False
-        self.timer.init(prescaler=(int(MusicPlaya.PRESCALER / self.speed)), period=MusicPlaya.BUFFER_SIZE-1, callback=self._callback)
-        boost = lambda x: x
-        if self.vol != 1:
-            boost = lambda x: min(max(127 + int( (x - 127) * self.vol ), 0), 255)
-        try:
-            while self.flag == False:
-                self.dacR.write(boost(bufferR[self.timer.counter()]))
-                self.dacL.write(boost(bufferL[self.timer.counter()])) # this goes out of range when 'file.read'  has read less than 'file.BUFFER_SIZE' bytes (it raises 'IndexError')
-        except IndexError:
-            raise EOSong(EOSong.NEXT)
+        super().play(lambda: fileR.readinto(self.bufferR) > 1 and fileL.readinto(self.bufferL) > 1,
+                     lambda: self.dacR.write(boost(self.bufferR[self.timer.counter()])) and self.dacL.write(boost(self.bufferL[self.timer.counter()])))
 
 
 class MusicPlayaMulti(MusicPlaya):
     def __init__(self, timer, *dac_list, vol=1, speed=1):
-        self.timer = timer
+        self.buffer_list = [bytearray(MusicPlaya.BUFFER_SIZE) for _ in len(dac_list)]
         self.dac_list = dac_list
-        self.vol = vol
-        self.speed = speed
-        
-        self.flag = False
+        super().__init__(timer, vol, speed)
     
     def play(self, *files):
-        buffers = [file.read(MusicPlaya.BUFFER_SIZE) for file in files]
-        self.flag = False
-        self.timer.init(prescaler=(int(MusicPlaya.PRESCALER / self.speed)), period=MusicPlaya.BUFFER_SIZE-1, callback=self._callback)
-        boost = lambda x: x
-        if self.vol != 1:
-            boost = lambda x: min(max(127 + int( (x - 127) * self.vol ), 0), 255)
-        try:
-            while self.flag == False:
-                for index, dac in enumerate(self.dac_list):
-                    dac.write(boost(buffers[index][self.timer.counter()]))  # this goes out of range when 'file.read'  has read less than 'file.BUFFER_SIZE' bytes (it raises 'IndexError')
-        except IndexError:
-            raise EOSong(EOSong.NEXT)
+        def condition():
+            sum([file.readinto(self.buffer_list[index]) > 1 for index, file in enumerate(files)]) == len(files)
+        def loop_part():
+            for index, dac in enumerate(self.dac_list):
+                dac.write(boost(buffer_list[index][self.timer.counter()]))
+        super().play(condition, loop_part)
 
 
 def _test():
     from pyb import DAC, Timer
     tim = Timer(8)
     dac1 = DAC(2) #'X6'
-    player = MusicPlaya(tim, dac1)
+    player = MusicPlayaMono(tim, dac1)
     with open('musica_test.raw', 'rb') as f:
         while 1:
             player.play(f)
