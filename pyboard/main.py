@@ -6,7 +6,7 @@ from math import ceil
 from time import sleep
 from pyb import Timer, DAC, UART
 from machine import Pin, ADC
-from musicplaya import MusicPlayaMono, EOSong
+from musicplaya import MusicPlaya, MusicPlayaMono, EOSong
 from songlister import lister
 
 from gc import collect, mem_alloc, mem_free
